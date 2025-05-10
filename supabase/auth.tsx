@@ -20,7 +20,8 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+// Using const arrow function for consistent component exports
+const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [phoneSession, setPhoneSession] = useState<{
@@ -77,8 +78,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const sendPhoneVerification = async (phoneNumber: string) => {
     try {
+      // Ensure phone number is in E.164 format (e.g., +14155552671)
+      let formattedPhone = phoneNumber.trim();
+
+      // Remove any non-digit characters except the leading +
+      formattedPhone = formattedPhone
+        .replace(/^\+/, "PLUS")
+        .replace(/[^0-9]/g, "")
+        .replace(/^PLUS/, "+");
+
+      if (!formattedPhone.startsWith("+")) {
+        formattedPhone = `+${formattedPhone}`;
+      }
+
+      // Validate the phone number format before sending to Supabase
+      if (!/^\+[1-9]\d{1,14}$/.test(formattedPhone)) {
+        return {
+          success: false,
+          error:
+            "Phone number must be in E.164 format: + followed by country code and number",
+        };
+      }
+
       const { error } = await supabase.auth.signInWithOtp({
-        phone: phoneNumber,
+        phone: formattedPhone,
       });
 
       if (error) {
@@ -86,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: error.message };
       }
 
-      setPhoneSession((prev) => ({ ...prev, phoneNumber }));
+      setPhoneSession((prev) => ({ ...prev, phoneNumber: formattedPhone }));
       return { success: true };
     } catch (error) {
       console.error("Error sending verification code:", error);
@@ -144,12 +167,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
+// Using const arrow function for consistent hook exports
+const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-}
+};
+
+// Export components and hooks at the end of the file
+export { AuthProvider, useAuth };

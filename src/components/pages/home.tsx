@@ -51,15 +51,31 @@ export default function LandingPage() {
 
     try {
       // Format phone number to E.164 format if not already formatted
-      let formattedPhone = phoneNumber;
-      if (!phoneNumber.startsWith("+")) {
-        // If US number without country code, add +1
-        if (phoneNumber.length === 10 && /^\d+$/.test(phoneNumber)) {
-          formattedPhone = `+1${phoneNumber}`;
+      let formattedPhone = phoneNumber.trim();
+
+      // Remove any non-digit characters except the leading +
+      formattedPhone = formattedPhone
+        .replace(/^\+/, "PLUS")
+        .replace(/[^0-9]/g, "")
+        .replace(/^PLUS/, "+");
+
+      if (!formattedPhone.startsWith("+")) {
+        // If US/Canada number without country code (10 digits), add +1
+        if (formattedPhone.length === 10) {
+          formattedPhone = `+1${formattedPhone}`;
         } else {
           // Otherwise assume it needs a + prefix
-          formattedPhone = `+${phoneNumber}`;
+          formattedPhone = `+${formattedPhone}`;
         }
+      }
+
+      // Validate the phone number format
+      if (!/^\+[1-9]\d{1,14}$/.test(formattedPhone)) {
+        setErrorMessage(
+          "Please enter a valid phone number in international format (e.g., +1XXXXXXXXXX)",
+        );
+        setIsSubmitting(false);
+        return;
       }
 
       const { success, error } = await sendPhoneVerification(formattedPhone);
@@ -365,9 +381,12 @@ export default function LandingPage() {
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   disabled={isSubmitting}
                   required
+                  pattern="[+]?[0-9\s()-]*"
+                  title="Please enter a valid phone number"
                 />
                 <p className="text-xs text-gray-500">
-                  We'll send you a verification code via SMS
+                  We'll send you a verification code via SMS. Please include
+                  your country code (e.g., +1 for US/Canada).
                 </p>
                 {errorMessage && (
                   <p className="text-xs text-red-500 mt-1">{errorMessage}</p>
