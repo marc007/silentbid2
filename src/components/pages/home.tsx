@@ -23,13 +23,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function LandingPage() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, sendPhoneVerification, verifyPhoneOTP, phoneSession } =
+    useAuth();
   const navigate = useNavigate();
   const [isScanning, setIsScanning] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [showVerification, setShowVerification] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleScanQR = () => {
     setIsScanning(true);
@@ -41,18 +44,68 @@ export default function LandingPage() {
     }, 2000);
   };
 
-  const handlePhoneSubmit = (e: React.FormEvent) => {
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real implementation, this would send an SMS with verification code
-    // For demo purposes, we'll just show the verification input
-    setShowVerification(true);
+    setErrorMessage("");
+    setIsSubmitting(true);
+
+    try {
+      // Format phone number to E.164 format if not already formatted
+      let formattedPhone = phoneNumber;
+      if (!phoneNumber.startsWith("+")) {
+        // If US number without country code, add +1
+        if (phoneNumber.length === 10 && /^\d+$/.test(phoneNumber)) {
+          formattedPhone = `+1${phoneNumber}`;
+        } else {
+          // Otherwise assume it needs a + prefix
+          formattedPhone = `+${phoneNumber}`;
+        }
+      }
+
+      const { success, error } = await sendPhoneVerification(formattedPhone);
+
+      if (success) {
+        setPhoneNumber(formattedPhone); // Store the formatted number
+        setShowVerification(true);
+      } else {
+        setErrorMessage(
+          error || "Failed to send verification code. Please try again.",
+        );
+      }
+    } catch (error) {
+      console.error("Error sending verification:", error);
+      setErrorMessage("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleVerificationSubmit = (e: React.FormEvent) => {
+  const handleVerificationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real implementation, this would verify the code
-    // For demo purposes, we'll just navigate to the auction items
-    navigate("/dashboard");
+    setErrorMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const { success, error } = await verifyPhoneOTP(
+        phoneNumber,
+        verificationCode,
+      );
+
+      if (success) {
+        // Close the dialog and navigate to dashboard
+        setIsDialogOpen(false);
+        navigate("/dashboard");
+      } else {
+        setErrorMessage(
+          error || "Invalid verification code. Please try again.",
+        );
+      }
+    } catch (error) {
+      console.error("Error verifying code:", error);
+      setErrorMessage("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -310,14 +363,29 @@ export default function LandingPage() {
                   placeholder="+1 (555) 000-0000"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
+                  disabled={isSubmitting}
                   required
                 />
                 <p className="text-xs text-gray-500">
                   We'll send you a verification code via SMS
                 </p>
+                {errorMessage && (
+                  <p className="text-xs text-red-500 mt-1">{errorMessage}</p>
+                )}
               </div>
-              <Button type="submit" className="w-full">
-                Send Verification Code
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isSubmitting || !phoneNumber}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    Sending...
+                  </>
+                ) : (
+                  "Send Verification Code"
+                )}
               </Button>
             </form>
           ) : (
@@ -330,11 +398,41 @@ export default function LandingPage() {
                   placeholder="Enter 6-digit code"
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value)}
+                  disabled={isSubmitting}
                   required
                 />
+                <p className="text-xs text-gray-500">
+                  Enter the code sent to {phoneNumber}
+                </p>
+                {errorMessage && (
+                  <p className="text-xs text-red-500 mt-1">{errorMessage}</p>
+                )}
               </div>
-              <Button type="submit" className="w-full">
-                Verify & Continue
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isSubmitting || verificationCode.length < 6}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    Verifying...
+                  </>
+                ) : (
+                  "Verify & Continue"
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full mt-2"
+                onClick={() => {
+                  setShowVerification(false);
+                  setErrorMessage("");
+                }}
+                disabled={isSubmitting}
+              >
+                Back to Phone Entry
               </Button>
             </form>
           )}

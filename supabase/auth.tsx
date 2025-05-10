@@ -8,6 +8,14 @@ type AuthContextType = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
+  sendPhoneVerification: (
+    phoneNumber: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  verifyPhoneOTP: (
+    phoneNumber: string,
+    token: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  phoneSession: { phoneNumber: string | null; verified: boolean };
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -15,6 +23,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [phoneSession, setPhoneSession] = useState<{
+    phoneNumber: string | null;
+    verified: boolean;
+  }>({
+    phoneNumber: null,
+    verified: false,
+  });
 
   useEffect(() => {
     // Check active sessions and sets the user
@@ -60,8 +75,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
+  const sendPhoneVerification = async (phoneNumber: string) => {
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: phoneNumber,
+      });
+
+      if (error) {
+        console.error("Error sending verification code:", error);
+        return { success: false, error: error.message };
+      }
+
+      setPhoneSession((prev) => ({ ...prev, phoneNumber }));
+      return { success: true };
+    } catch (error) {
+      console.error("Error sending verification code:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  };
+
+  const verifyPhoneOTP = async (phoneNumber: string, token: string) => {
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: phoneNumber,
+        token,
+        type: "sms",
+      });
+
+      if (error) {
+        console.error("Error verifying code:", error);
+        return { success: false, error: error.message };
+      }
+
+      // If verification is successful, update the phone session
+      setPhoneSession({ phoneNumber, verified: true });
+
+      // If there's a user returned, update the user state
+      if (data.user) {
+        setUser(data.user);
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error verifying code:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        signIn,
+        signUp,
+        signOut,
+        sendPhoneVerification,
+        verifyPhoneOTP,
+        phoneSession,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
